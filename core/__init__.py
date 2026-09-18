@@ -1,1 +1,1 @@
-"""Backend services for 4K Video Downloader Pro."""
+"""Pure-Python services for the downloader application."""

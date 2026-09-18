@@ -1,96 +1,56 @@
 from __future__ import annotations
 
-import threading
-from PySide6.QtCore import QObject, Signal
-
+import threading, uuid
+from collections.abc import Callable
 from .downloader import run_download
-from .settings import load_state, save_state
+from .history import HistoryStore
+from .models import DownloadTask
+from .settings import load_queue, save_queue
 
-
-class QueueManager(QObject):
-    changed = Signal()
-    task_updated = Signal(dict)
-    message = Signal(str)
-
+class QueueManager:
     def __init__(self) -> None:
-        super().__init__()
-        self.tasks = load_state()
-        self.running = False
-        self.paused = False
-        self.active_process = None
-        self.lock = threading.Lock()
-
-    def persist(self) -> None:
-        clean = [{key: value for key, value in task.items() if key != "process"} for task in self.tasks]
-        save_state(clean)
-        self.changed.emit()
-
-    def add(self, tasks: list[dict]) -> None:
-        self.tasks.extend(tasks)
-        self.persist()
-        self.start()
-
-    def start(self) -> None:
-        if self.running or self.paused:
-            return
-        threading.Thread(target=self._loop, daemon=True).start()
-
-    def _loop(self) -> None:
-        with self.lock:
+        self.tasks = [DownloadTask.from_dict(item) for item in load_queue()]; self.history = HistoryStore(); self.paused = False; self.running = False; self._lock = threading.Lock(); self._cancelled: set[str] = set(); self._listeners: list[Callable[[DownloadTask | None], None]] = []
+    def subscribe(self, listener): self._listeners.append(listener)
+    def _notify(self, task=None):
+        save_queue([item.to_dict() for item in self.tasks])
+        for listener in self._listeners: listener(task)
+    def add(self, tasks): self.tasks.extend(tasks); self._notify(); self.start()
+    def create(self, url, title, folder, **kwargs): return DownloadTask(id=str(uuid.uuid4()), url=url, title=title, folder=folder, **kwargs)
+    def start(self):
+        if not self.running and not self.paused: threading.Thread(target=self._loop, daemon=True).start()
+    def _loop(self):
+        with self._lock:
             self.running = True
             while not self.paused:
-                pending = next((task for task in self.tasks if task.get("status") == "Queued"), None)
-                if pending is None:
-                    break
-                run_download(pending, lambda: self.paused, self._updated)
-                self.persist()
-            self.running = False
-            self.changed.emit()
-
-    def _updated(self, task: dict) -> None:
-        self.task_updated.emit({key: value for key, value in task.items() if key != "process"})
-        self.changed.emit()
-        self.persist()
-
-    def pause(self) -> None:
+                task = next((item for item in self.tasks if item.status == "Queued"), None)
+                if task is None: break
+                run_download(task, lambda: self.paused, lambda: task.id in self._cancelled, self._updated); self.history.record(task); self._notify(task)
+            self.running = False; self._notify()
+    def _updated(self, task): self._notify(task)
+    def pause(self):
         self.paused = True
         for task in self.tasks:
-            process = task.get("process")
-            if process:
-                try:
-                    process.kill()
-                except OSError:
-                    pass
-            if task.get("status") in {"Queued", "Downloading", "Merging"}:
-                task["status"] = "Paused"
-                task["detail"] = "Paused"
-        self.persist()
-
-    def resume(self) -> None:
+            if task.status in {"Queued", "Downloading", "Merging"}: task.status, task.detail = "Paused", "Paused"
+        self._notify()
+    def resume(self):
         self.paused = False
         for task in self.tasks:
-            if task.get("status") in {"Paused", "Interrupted", "Error", "Incomplete"}:
-                task.pop("cancel_requested", None)
-                task["status"] = "Queued"
-                task["detail"] = "Queued"
-        self.persist()
-        self.start()
-
-    def cancel(self, task_id: str) -> None:
+            if task.status in {"Paused", "Failed", "Incomplete"}: task.status, task.detail = "Queued", "Queued"
+        self._notify(); self.start()
+    def cancel(self, task_id):
+        self._cancelled.add(task_id)
         for task in self.tasks:
-            if task.get("id") == task_id:
-                task["cancel_requested"] = True
-                process = task.get("process")
+            if task.id == task_id and task.status != "Completed":
+                process = getattr(task, "_process", None)
                 if process:
-                    try:
-                        process.kill()
-                    except OSError:
-                        pass
-                task["status"] = "Cancelled"
-                task["detail"] = "Cancelled"
-        self.persist()
-
-    def reset(self) -> None:
-        self.pause()
-        self.tasks.clear()
-        self.persist()
+                    try: process.kill()
+                    except OSError: pass
+                task.status, task.detail = "Cancelled", "Cancelled"
+        self._notify()
+    def retry(self, task_id):
+        self._cancelled.discard(task_id)
+        for task in self.tasks:
+            if task.id == task_id: task.status, task.error, task.detail = "Queued", "", "Queued"
+        self._notify(); self.start()
+    def remove(self, task_id): self.tasks = [task for task in self.tasks if task.id != task_id]; self._notify()
+    def clear_completed(self): self.tasks = [task for task in self.tasks if task.status != "Completed"]; self._notify()

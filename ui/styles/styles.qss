@@ -1,0 +1,15 @@
+QWidget { background:#0B0F14; color:#F5F7FA; font-family:'Segoe UI'; font-size:13px; }
+QFrame#Sidebar,QFrame#Topbar,QFrame#Surface,QFrame#Statusbar { background:#111820; border:1px solid #293441; border-radius:9px; }
+QLabel#Brand { font-size:16px; font-weight:700; }
+QLabel#PageTitle { font-size:25px; font-weight:700; }
+QLabel#Muted,QLabel#SectionLabel { color:#8B98A7; }
+QLineEdit,QTextEdit,QComboBox,QListWidget,QListView { background:#1C2530; border:1px solid #293441; border-radius:7px; padding:9px; color:#F5F7FA; }
+QPushButton { background:#1C2530; border:1px solid #293441; border-radius:7px; padding:9px 14px; }
+QPushButton:hover { border-color:#3B82F6; background:#202D3B; }
+QPushButton#Primary { background:#3B82F6; border-color:#3B82F6; font-weight:700; }
+QPushButton#Nav { text-align:left; border:0; background:transparent; color:#8B98A7; padding:10px 12px; }
+QPushButton#Nav:hover,QPushButton#Nav[active="true"] { background:#1C2530; color:#F5F7FA; }
+QProgressBar { background:#1C2530; border:0; border-radius:4px; height:8px; text-align:center; }
+QProgressBar::chunk { background:#3B82F6; border-radius:4px; }
+QCheckBox { spacing:8px; }
+QScrollArea { border:0; }

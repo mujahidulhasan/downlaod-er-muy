@@ -5,41 +5,21 @@ import os
 from pathlib import Path
 
 APP_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local")) / "4KVideoDownloader"
-STATE_FILE = APP_DATA_DIR / "downloads_state.json"
-SETTINGS_FILE = APP_DATA_DIR / "app_settings.json"
-DEFAULT_OUT_DIR = Path.home() / "Downloads"
-
+SETTINGS_FILE = APP_DATA_DIR / "settings.json"
+STATE_FILE = APP_DATA_DIR / "queue.json"
+DEFAULTS = {"default_folder": str(Path.home() / "Downloads"), "default_quality": "1080p Full HD (MP4)", "audio_quality": "320 kbps", "subtitles": False, "theme": "dark", "notifications": True, "keep_history": True}
 
 def load_settings() -> dict:
-    try:
-        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"default_save_folder": str(DEFAULT_OUT_DIR), "theme": "dark"}
+    try: data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError): data = {}
+    return {**DEFAULTS, **data}
 
+def save_settings(settings: dict) -> None:
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True); SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
-def save_settings(data: dict) -> None:
-    try:
-        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except OSError:
-        pass
+def load_queue() -> list[dict]:
+    try: return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError): return []
 
-
-def load_state() -> list[dict]:
-    try:
-        tasks = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        for task in tasks:
-            if task.get("status") in {"Downloading", "Merging"}:
-                task["status"] = "Interrupted"
-                task["detail"] = "Interrupted"
-        return tasks
-    except (OSError, json.JSONDecodeError):
-        return []
-
-
-def save_state(tasks: list[dict]) -> None:
-    try:
-        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
-    except OSError:
-        pass
+def save_queue(tasks: list[dict]) -> None:
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True); STATE_FILE.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
