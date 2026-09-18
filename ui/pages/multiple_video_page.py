@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QComboBox, QLabel, QListWidget, QPushButton, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QListWidget, QPushButton, QTextEdit, QVBoxLayout, QWidget
 from core.multi_url_parser import extract_video_urls
 
 class MultipleVideoPage(QWidget):
